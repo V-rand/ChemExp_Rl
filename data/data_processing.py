@@ -1,3 +1,4 @@
+# 数据处理脚本 - 将原始 JSONL 转换为符合 VERL Schema 的 Parquet 文件
 import json
 import re
 import argparse
