@@ -2,9 +2,9 @@
 import json
 import re
 import argparse
-import random  
+import random
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 import pyarrow as pa
 import pyarrow.parquet as pq
 from tqdm import tqdm
@@ -12,6 +12,37 @@ from tqdm import tqdm
 # ================= 配置区 =================
 DATA_SOURCE = "chemexp"
 ABILITY = "chemical_synthesis"
+
+# ================= SMILES 工具函数 =================
+try:
+    from rdkit import Chem, rdBase
+    rdBase.DisableLog('rdApp.*')
+    HAS_RDKIT = True
+except ImportError:
+    HAS_RDKIT = False
+    Chem = None
+
+def canonicalize_smiles(smiles: str) -> str:
+    """RDKit标准化SMILES"""
+    if not HAS_RDKIT:
+        return smiles.strip()
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol:
+            return Chem.MolToSmiles(mol, canonical=True, isomericSmiles=False)
+    except:
+        pass
+    return smiles.strip()
+
+def extract_smiles_from_mol_tag(text: str) -> Optional[str]:
+    """从[MOL] ```SMILES``` [/MOL]格式中提取SMILES"""
+    m = re.search(r'\[MOL\]\s*```(.*?)```\s*\[/MOL\]', text, re.DOTALL)
+    return m.group(1).strip() if m else None
+
+def extract_quantities(text: str) -> List[str]:
+    """提取用量，支持多数值格式如 (0.60 g, 1.5 mmol)"""
+    # 匹配括号内的数值+单位，支持mg和mol
+    return re.findall(r'\(([\d.]+\s*(?:g|mg|mmol|ml|L|M|uL|mol)\s*(?:,\s*[\d.]+\s*(?:g|mg|mmol|ml|L|M|uL|mol))*)\)', text, re.IGNORECASE)
 
 # ================= 工具函数 =================
 def load_system_prompt() -> str:
@@ -29,15 +60,63 @@ def extract_final_yield_step(action_text: str) -> str:
     yield_steps = re.findall(r'<procedure>YIELD\s*(.*?)</procedure>', action_text, re.IGNORECASE | re.DOTALL)
     return yield_steps[-1].strip() if yield_steps else ""
 
+def extract_reactant_quantities(item: Dict) -> Dict[str, str]:
+    """
+    从ACTION的MAKESOLUTION和ADD步骤中提取所有反应物用量
+
+    返回: {标准化SMILES: 用量字符串}
+    """
+    action_text = item.get("ACTION", "")
+    quantities_map = {}
+
+    # 匹配所有 MAKESOLUTION 和 ADD 步骤
+    procedure_pattern = r'<procedure>\s*(MAKESOLUTION|ADD)\s*(.*?)\s*</procedure>'
+    procedure_matches = re.finditer(procedure_pattern, action_text, re.IGNORECASE | re.DOTALL)
+
+    for match in procedure_matches:
+        procedure_content = match.group(2)
+
+        # 提取所有 [MOL] ```SMILES``` [/MOL] (用量) 的组合
+        mol_pattern = r'\[MOL\]\s*```(.*?)```\s*\[/MOL\]\s*(?:\(([^)]+)\))?'
+        mol_matches = re.finditer(mol_pattern, procedure_content, re.DOTALL)
+
+        for mol_match in mol_matches:
+            smiles = mol_match.group(1).strip()
+            quantity = mol_match.group(2)
+            if smiles:
+                canon_smiles = canonicalize_smiles(smiles)
+                if quantity:
+                    quantities_map[canon_smiles] = quantity
+
+    return quantities_map
+
+
 def build_user_prompt(item: Dict) -> str:
     """构建 User Prompt，将产物和产量合并"""
     parts = ["Please design a chemical experiment based on the following requirements:"]
-    
-    # 1. 反应物
+
+    # 提取用量映射
+    quantities_map = extract_reactant_quantities(item)
+
+    # 1. 反应物（添加用量）
     reactants = item.get("REACTANT", [])
     if reactants:
-        parts.append(f"Reactants: {', '.join(reactants)}")
-        
+        reactant_with_qty = []
+        for r in reactants:
+            smiles = extract_smiles_from_mol_tag(r)
+            if smiles:
+                canon_smiles = canonicalize_smiles(smiles)
+                quantity = quantities_map.get(canon_smiles, "")
+                if quantity:
+                    # 提取SMILES并添加用量
+                    new_r = re.sub(r'\[/MOL\]\s*$', f'[/MOL] ({quantity})', r) if '[/MOL]' in r else f"{r} ({quantity})"
+                    reactant_with_qty.append(new_r)
+                else:
+                    reactant_with_qty.append(r)
+            else:
+                reactant_with_qty.append(r)
+        parts.append(f"Reactants: {', '.join(reactant_with_qty)}")
+
     # 2. 目标产物与产量 (直接从 Action 提取)
     final_output = extract_final_yield_step(item.get("ACTION", ""))
     if final_output:
@@ -46,20 +125,26 @@ def build_user_prompt(item: Dict) -> str:
         products = item.get("PRODUCT", [])
         if products:
             parts.append(f"Product: {', '.join(products)}")
-        
+
     # 3. 辅助化学品
     if item.get("CATALYST"):
         parts.append(f"Catalyst: {', '.join(item['CATALYST'])}")
     if item.get("SOLVENT"):
         parts.append(f"Solvent: {', '.join(item['SOLVENT'])}")
-        
+
     return "\n".join(parts)
 
 def process_single_item(item: Dict, idx: int, system_prompt: str, split: str) -> Dict:
     """转换为符合 VERL Schema 的单条数据"""
     action_text = item.get("ACTION", "")
     actions_list = re.findall(r'<procedure>(.*?)</procedure>', action_text, re.DOTALL)
-    
+
+    # 标准化molecules表中的SMILES
+    raw_molecules = item.get("molecules", {})
+    canonicalized_molecules = {}
+    for name, smiles in raw_molecules.items():
+        canonicalized_molecules[name] = canonicalize_smiles(smiles)
+
     return {
         "data_source": DATA_SOURCE,
         "prompt": [
@@ -72,7 +157,7 @@ def process_single_item(item: Dict, idx: int, system_prompt: str, split: str) ->
             "ground_truth": {
                 "thinking": item.get("Thinking_text", ""),
                 "actions": [a.strip() for a in actions_list],
-                "molecules": json.dumps(item.get("molecules", {}))
+                "molecules": json.dumps(canonicalized_molecules)
             }
         },
         "extra_info": {
