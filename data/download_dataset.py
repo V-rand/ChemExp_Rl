@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 
 DATASET_REPO = "CAS-SIAT-XinHai/ReactiGraph"
-DATASET_FILE = "AutoRxn/exp_train_data_step_thinking_20k.jsonl"
+DATASET_FILE = "AutoRxn/exp_train_data_step_thinking_10w.jsonl"
 
 
 def download_with_hf_hub(token: str, output_dir: str) -> str:
