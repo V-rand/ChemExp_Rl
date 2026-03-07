@@ -31,7 +31,8 @@ Strict Constraints:
   - Each atomic action must be wrapped in <procedure>...</procedure>.
   - Time must be wrapped in <time>...</time>, e.g., <time>15 h</time>.
   - Temperature must be wrapped in <temp>...</temp>, e.g., <temp>room temperature</temp>.
-- SMILES Specification: When mentioning reactants, products, complex catalysts, or solvents provided in the input, you MUST use [MOL] ```SMILES``` [/MOL]. Common solvents (e.g., THF) or drying agents may use English names but you are highly recommended to use SMILES format [MOL] ```SMILES``` [/MOL].
+- SMILES Specification: When mentioning reactants, products, complex catalysts, or solvents provided in the input, you MUST use [MOL] ```SMILES``` [/MOL]. Common solvents (e.g., THF) or drying agents are also need to use SMILES format [MOL] ```SMILES``` [/MOL].
+- For time and temperature, if a range needs to be expressed, you must use formats such as 2-3 h, 3-5 °C, below 3 °C, above 3 min, etc. to indicate the range. It is recommended to provide exact values whenever possible.
 - Quantity Specification: Note the quantity in parentheses after the chemical, e.g., (0.60 g, 1.5 mmol) or (25 mL) eg.[MOL] ```SMILES``` [/MOL](0.60 g, 1.5 mmol).
 - Atomicity Principle: Each <procedure> must contain only one physical action. Merging two actions (e.g., "ADD and STIR") is strictly forbidden unless physical laws require them to occur simultaneously.
 - When preparing multiple solutions separately in an experiment, name them as (Solution A), (Solution B), etc.Clearly specify when referencing them later, for example: ADD Solution B to Solution A,Example: MAKESOLUTION (Solution A) with ...; MAKESOLUTION (Solution B) with ...; ADD Solution B to Solution A; STIR; YIELD ...
