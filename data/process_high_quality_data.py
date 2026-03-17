@@ -541,12 +541,12 @@ def process_high_quality_data(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="处理高质量化学实验数据")
     parser.add_argument("--input", type=str, 
-                        default="data/raw/last_1500_temp.jsonl",
+                        default="/home/xiemingjie/WorkSpace/Exp_project/ChemExp_Rl/data/raw/exp_train_data_step_thinking_100k.jsonl",
                         help="输入JSONL文件路径 (默认: data/raw/last_1500_temp.jsonl)")
     parser.add_argument("--output", type=str, 
-                        default="data/raw/high_quality_1k.jsonl",
+                        default="data/raw/high_quality_90k.jsonl",
                         help="输出JSONL文件路径 (默认: data/raw/high_quality_1k.jsonl)")
-    parser.add_argument("--target_count", type=int, default=1000,
+    parser.add_argument("--target_count", type=int, default=90000,
                         help="目标数据条数 (默认: 1000)")
     
     args = parser.parse_args()

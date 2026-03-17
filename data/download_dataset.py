@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 
 DATASET_REPO = "CAS-SIAT-XinHai/ReactiGraph"
-DATASET_FILE = "AutoRxn/exp_train_data_step_thinking_100k.jsonl"
+DATASET_FILE = "AutoRxn/exp_test_data_6k.jsonl"
 
 
 def download_with_hf_hub(token: str, output_dir: str) -> str:
@@ -40,7 +40,7 @@ def download_with_hf_hub(token: str, output_dir: str) -> str:
         print(f"Downloaded to: {file_path}")
         
         # 复制到输出目录
-        output_path = Path(output_dir) / "exp_train_data_step_thinking_100k.jsonl"
+        output_path = Path(output_dir) / "exp_test_data_6k.jsonl"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
         import shutil
